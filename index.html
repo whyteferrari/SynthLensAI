@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SynthLens AI Scanner — UNESCO MIL Forensic Framework</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- Include ExifReader for deep metadata checks -->
+  <script src="https://cdn.jsdelivr.net/npm/exifreader@4.23.0/dist/exif-reader.js"></script>
+</head>
+<body>
+  <main class="synth-container">
+    <header class="synth-header">
+      <h1>SynthLens AI Scanner</h1>
+      <p>Media & Information Literacy (MIL) Socratic Copilot & Provenance Platform.</p>
+    </header>
+
+    <!-- Side-by-Side Input Section -->
+    <div class="synth-inputs-grid">
+      <!-- Image Scanner Section -->
+      <section class="scan-card">
+        <h2>1. Multimodal Asset Input</h2>
+        <div id="dropZone" class="drop-zone">
+          <input type="file" id="fileInput" accept="image/*" hidden>
+          <div class="drop-prompt">
+            <svg width="40" height="40" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+            <span>Drop image asset here, or <label for="fileInput" class="browse-link">browse local files</label></span>
+          </div>
+          <img id="imagePreview" class="image-preview hidden" alt="Uploaded Preview">
+        </div>
+
+        <div class="button-group">
+          <button id="scanBtn" disabled>Run Forensic Audit</button>
+          <button id="resetBtn" class="secondary-btn hidden">Reset Pipeline</button>
+        </div>
+        <div id="status" class="status-text">System ready. Awaiting media input...</div>
+      </section>
+
+      <!-- Text Scanner Section -->
+      <section class="scan-card">
+        <h2>2. Text / Caption Input</h2>
+        <p style="font-size: 0.9rem; color: #94a3b8; margin-bottom: 10px;">Paste captions or textual bodies to audit against automated generation markers.</p>
+        <textarea id="textInput" placeholder="Paste text or metadata captions here..." style="width: 100%; height: 145px; background: #0f172a; color: #f8fafc; border: 1px solid #334155; border-radius: 8px; padding: 12px; font-family: inherit; resize: vertical;"></textarea>
+        <button id="scanTextBtn" style="margin-top: 10px; background: #6366f1; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%;">Audit Text Stream</button>
+      </section>
+    </div>
+
+    <!-- Top-Level Definitive Verdict Panel -->
+    <section class="results-grid">
+      <div class="panel" id="topVerdictPanel" style="grid-column: span 2; border: 2px solid #64748b; background: #0f172a; text-align: center; padding: 1.5rem;">
+        <span style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; display: block; margin-bottom: 4px;">Provenance & Triage Assessment</span>
+        <h2 id="topVerdictText" style="font-size: 1.75rem; margin: 0; color: #64748b;">Verdict: Awaiting Analysis</h2>
+      </div>
+    </section>
+
+    <!-- UNESCO Socratic Copilot & Interactive Checklist (The Hero Feature) -->
+    <section class="results-grid">
+      <div class="panel" style="grid-column: span 2; border-color: #6366f1; background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);">
+        <h3 style="color: #818cf8; display: flex; justify-content: space-between; align-items: center;">
+          <span>UNESCO Socratic MIL Copilot & Verification Guide</span>
+          <span style="font-size: 10px; background: #312e81; color: #c7d2fe; padding: 2px 8px; border-radius: 4px;">Interactive Checklist</span>
+        </h3>
+        <div id="milGuidanceBox" style="padding: 10px 0; color: #cbd5e1; line-height: 1.6;">
+          Upload an asset or input text to initialize the guided Socratic verification workflow.
+        </div>
+      </div>
+    </section>
+
+    <!-- Multi-Modal Forensic Panels Grid -->
+    <section class="results-grid">
+      <div class="panel">
+        <h3>Extracted OCR & Contextual Text</h3>
+        <div id="ocrOutput" class="output-box">(No textual overlay extracted)</div>
+      </div>
+
+      <div class="panel">
+        <h3>EXIF & Metadata Provenance</h3>
+        <div id="exifOutput" class="output-box" style="font-family: monospace; font-size: 0.85rem;">(Awaiting file metadata stream)</div>
+      </div>
+    </section>
+
+    <!-- Deep Forensic Explainability Breakdown -->
+    <section class="results-grid">
+      <div class="panel">
+        <h3>Structural Heuristics & Signals</h3>
+        <div class="hud-box">
+          <div class="synthlens-title">Neural & Structural Marker Assessment</div>
+          <div class="synthlens-score">
+            <span id="imgDot" class="synthlens-dot" style="background: #64748b;"></span>
+            <span id="imgScoreText">Awaiting Asset</span>
+          </div>
+          <div id="imgLabel" class="synthlens-status-label">No artifact mapping performed yet.</div>
+          <ul id="artifactList" style="margin-top: 10px; padding-left: 20px; font-size: 0.9rem; color: #94a3b8;">
+            <li>Pending structural inspection...</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Cross-Modal Semantic Consistency</h3>
+        <div class="hud-box">
+          <div class="synthlens-title">Header-to-Visual Alignment</div>
+          <div class="synthlens-score">
+            <span id="crossDot" class="synthlens-dot" style="background: #64748b;"></span>
+            <span id="crossScoreText">Idle</span>
+          </div>
+          <div id="crossLabel" class="synthlens-status-label">Validating alignment between caption text and visual elements.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Analytical Infographic Studio Studio (The Multiplier Feature) -->
+    <section class="results-grid" id="cardGeneratorSection" style="display: none;">
+      <div class="panel" style="grid-column: span 2; border-color: #10b981;">
+        <h3 style="color: #34d399;">Shareable MIL Analytical Infographic Studio</h3>
+        <p style="font-size: 12px; color: #94a3b8; margin-bottom: 10px;">Turn your deep audit into an institutional data-journalism report card to debunk misinformation.</p>
+        
+        <!-- Preview Canvas / Render Box -->
+        <div id="shareCardPreview" style="background: #090d16; border: 1px solid #334155; border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1e293b; padding-bottom: 8px;">
+            <span style="font-size: 11px; font-weight: bold; color: #818cf8; text-transform: uppercase;">SynthLens Fact-Check Infographic Briefing</span>
+            <span id="cardBadge" style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: #065f46; color: #34d399;">Verified</span>
+          </div>
+          <p id="cardHeadline" style="font-size: 14px; font-weight: bold; color: #f8fafc;">Awaiting audit results...</p>
+          <p id="cardSummary" style="font-size: 12px; color: #94a3b8;">Run a forensic check to populate educational findings.</p>
+          <div style="font-size: 10px; color: #64748b; margin-top: 4px; border-top: 1px dashed #1e293b; pt: 6px;">Powered by UNESCO Media & Information Literacy (MIL) Framework</div>
+        </div>
+
+        <div style="display: flex; gap: 10px;">
+          <button id="downloadCardBtn" style="background: #6366f1; color: white; border: none; padding: 10px; border-radius: 6px; font-weight: bold; cursor: pointer; flex: 1;">Download Analytical Infographic (PNG)</button>
+          <button id="copyCardBtn" style="background: #10b981; color: white; border: none; padding: 10px; border-radius: 6px; font-weight: bold; cursor: pointer; flex: 1;">Copy Summary Text for Chat</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Required External Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
