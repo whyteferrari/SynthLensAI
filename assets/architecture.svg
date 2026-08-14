@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="300" viewBox="0 0 800 300">
+  <style>
+    .box { fill:#f7fbff; stroke:#2b6cb0; stroke-width:2; rx:6; }
+    .small { fill:#ffffff; stroke:#94a3b8; stroke-width:1; rx:4; }
+    .text { font-family: Inter, Arial, sans-serif; font-size:13px; fill:#0f172a; }
+    .title { font-weight:700; font-size:14px; }
+    .arrow { stroke:#334155; stroke-width:2; fill:none; marker-end:url(#arrowhead); }
+  </style>
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#334155" />
+    </marker>
+  </defs>
+
+  <!-- Browser UI -->
+  <rect class="box" x="24" y="24" width="260" height="90" />
+  <text class="text title" x="44" y="46">Browser UI</text>
+  <text class="text" x="44" y="66">index.html · style.css · app.js</text>
+  <text class="text" x="44" y="84">UI Controls / File input</text>
+
+  <!-- Processing Modules -->
+  <rect class="box" x="320" y="18" width="320" height="140" />
+  <text class="text title" x="340" y="40">Processing Modules</text>
+  <text class="text" x="340" y="64">• EXIF: exifreader</text>
+  <text class="text" x="340" y="86">• OCR: tesseract.js</text>
+  <text class="text" x="340" y="108">• ML: onnxruntime-web</text>
+
+  <!-- Model and Image -->
+  <rect class="small" x="660" y="28" width="110" height="48" />
+  <text class="text" x="674" y="58">model.onnx</text>
+  <rect class="small" x="660" y="96" width="110" height="48" />
+  <text class="text" x="674" y="126">Local image / Blob</text>
+
+  <!-- Arrows -->
+  <path class="arrow" d="M284 70 L320 70" />
+  <path class="arrow" d="M640 46 L660 46" />
+  <path class="arrow" d="M640 116 L660 116" />
+
+  <!-- Labels -->
+  <text class="text" x="200" y="140">Client-side flow (no server required)</text>
+</svg>

@@ -23,24 +23,12 @@ Key Features
 - Minimal privacy exposure: image data never leaves the client.
 - Simple HTML + JS single-page app (`index.html`, `app.js`) for quick demos and prototyping.
 
-Architecture Diagram (ASCII)
-/-----------------------------\
-|        Browser UI           |
-|  (`index.html`, `style.css`)|
-|         + App JS            |
-|         |  app.js           |
-|         v                   |
-|  +----------------------+   |
-|  | Processing Modules   |   |
-|  | - EXIF: exifreader   |   |
-|  | - OCR: tesseract.js  |   |
-|  | - ML: onnxruntime-web|   |
-|  +----------------------+   |
-|         |   |      |         |
-|         |   |      |         |
-|  v   v     v      v          |
-| `model.onnx`  Local image file|
-\-----------------------------/
+Architecture Diagram
+
+![Architecture diagram (SVG)](assets/architecture.svg)
+![Architecture diagram (PNG, 2x)](assets/architecture@2x.png)
+
+The diagram above illustrates the client-side flow: UI components feed images into processing modules (EXIF extraction, OCR, and ONNX inference). The model weights (`model.onnx`) and local image/blob remain on the client unless explicitly uploaded.
 
 Prerequisites & Installation
 1. Prerequisites
