@@ -30,9 +30,31 @@
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ Architecture Diagram
 
-![Architecture diagram](assets/architecture.svg)
+```mermaid
+flowchart LR
+    subgraph Client ["Client Browser (100% Offline)"]
+        direction LR
+        
+        UI["🖥️ Browser UI<br/><i>(index.html / app.js)</i>"]
+        Input["🖼️ Local Image / Blob"]
+        Model[("🧠 model.onnx<br/><i>(Local Weights)</i>")]
+        
+        subgraph Engine ["Processing Engine"]
+            EXIF["📷 EXIF<br/><i>exifreader</i>"]
+            OCR["🔤 OCR<br/><i>tesseract.js</i>"]
+            ML["⚡ ML Inference<br/><i>onnxruntime-web</i>"]
+        end
+        
+        Results["📊 Analysis Output<br/><i>(Metadata, Text, Predictions)</i>"]
+        
+        UI -->|Uploads| Input
+        Input -->|Raw Data| Engine
+        Model -.->|Loads| ML
+        Engine -->|Processes| Results
+    end
+```
 
 The diagram above illustrates the client-side execution flow: user interface components feed uploaded images directly into modular processing engines (EXIF parsing, OCR extraction, and ONNX inference). The loaded ML model weights (`model.onnx`) and image blobs remain securely within the client's local memory.
 
