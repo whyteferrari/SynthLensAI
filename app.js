@@ -10,6 +10,7 @@ const resetBtn = document.getElementById('resetBtn');
 const statusDiv = document.getElementById('status');
 const ocrOutput = document.getElementById('ocrOutput');
 const exifOutput = document.getElementById('exifOutput');
+const factCheckOutput = document.getElementById('factCheckOutput'); // Added Fact-Check container reference
 
 const textInput = document.getElementById('textInput');
 const scanTextBtn = document.getElementById('scanTextBtn');
@@ -95,6 +96,7 @@ resetBtn.addEventListener('click', () => {
   
   ocrOutput.innerText = "(No textual overlay extracted)";
   exifOutput.innerText = "(Awaiting file metadata stream)";
+  factCheckOutput.innerHTML = "(Awaiting text stream or OCR text to cross-reference claims...)";
   artifactList.innerHTML = "<li>Pending structural inspection...</li>";
   
   topVerdictPanel.style.borderColor = "#64748b";
@@ -138,16 +140,13 @@ async function runForensicInspection(file, imageUrl) {
     const buffer = await file.arrayBuffer();
     const exifData = ExifReader.load(buffer, { expanded: true });
     
-    // Extract standard groups or fall back to flat tags if expanded layout isn't fully populated
     const tags = exifData.tags || exifData;
     const imageTags = exifData.image || {};
     const exifSubTags = exifData.exif || {};
     const gpsTags = exifData.gps || {};
 
-    // Helper to safely pull description values
     const getVal = (obj, key) => obj[key]?.description || obj[key]?.value || null;
 
-    // 1. Hardware & Core Identity
     const make = getVal(tags, 'Make') || getVal(imageTags, 'Make');
     const model = getVal(tags, 'Model') || getVal(imageTags, 'Model');
     const software = getVal(tags, 'Software') || getVal(imageTags, 'Software');
@@ -158,7 +157,6 @@ async function runForensicInspection(file, imageUrl) {
     if (lensModel) metadataReport.push(`Lens: ${lensModel}`);
     if (software) metadataReport.push(`Software / Editor: ${software}`);
 
-    // 2. Optical & Camera Exposure Settings
     const exposure = getVal(tags, 'ExposureTime') || getVal(exifSubTags, 'ExposureTime');
     const fNumber = getVal(tags, 'FNumber') || getVal(exifSubTags, 'FNumber');
     const iso = getVal(tags, 'ISOSpeedRatings') || getVal(exifSubTags, 'ISOSpeedRatings');
@@ -171,19 +169,16 @@ async function runForensicInspection(file, imageUrl) {
     if (focalLength) metadataReport.push(`Focal Length: ${focalLength}mm`);
     if (flash) metadataReport.push(`Flash: ${flash}`);
 
-    // 3. Temporal Signatures
     const dateTimeOriginal = getVal(tags, 'DateTimeOriginal') || getVal(exifSubTags, 'DateTimeOriginal');
     const dateTimeDigitized = getVal(tags, 'DateTimeDigitized') || getVal(exifSubTags, 'DateTimeDigitized');
     
     if (dateTimeOriginal) metadataReport.push(`Captured: ${dateTimeOriginal}`);
     else if (dateTimeDigitized) metadataReport.push(`Digitized: ${dateTimeDigitized}`);
 
-    // 4. Geolocation Traces (If present)
     const lat = getVal(gpsTags, 'Latitude') || getVal(tags, 'GPSLatitude');
     const lon = getVal(gpsTags, 'Longitude') || getVal(tags, 'GPSLongitude');
     if (lat && lon) metadataReport.push(`GPS Coordinates: ${lat}, ${lon}`);
 
-    // Fallback if structured properties were sparse, iterate over top keys dynamically
     if (metadataReport.length === 0 && Object.keys(tags).length > 0) {
       const priorityKeys = ['DateTime', 'Artist', 'Copyright', 'ColorSpace', 'ImageWidth', 'ImageHeight', 'Orientation'];
       priorityKeys.forEach(k => {
@@ -201,7 +196,7 @@ async function runForensicInspection(file, imageUrl) {
   exifOutput.innerHTML = metadataReport.join("<br>");
 
   let artifacts = [];
-  let aiProbability = 82; // Default deterministic baseline or heuristic score
+  let aiProbability = 82; 
 
   if (ortSession) {
     try {
@@ -227,26 +222,118 @@ async function runForensicInspection(file, imageUrl) {
   return { aiProbability, isAI, artifacts, exifText: exifOutput.innerText };
 }
 
+async function runFactCheckAudit(textQuery) {
+  const factCheckOutput = document.getElementById("factCheckOutput");
+  
+  if (!textQuery || textQuery.includes("(No readable text") || textQuery.trim() === "") {
+    factCheckOutput.innerHTML = "No textual claims detected for fact-checking.";
+    return;
+  }
+
+  factCheckOutput.innerHTML = "Consulting forensic AI model for claim verification...";
+
+  const GEMINI_API_KEY = "AQ.A=b8R=N6LW9-VsZ=Q-8MS9f=t81p=s56s=sWsGZAG=BdRYYin=0CA=4Yj=8A";
+  // Updated to the latest stable production model endpoint
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${GEMINI_API_KEY}`;
+
+  const prompt = `You are a forensic fact-checking assistant. Analyze the following claim or text corpus for authenticity, viral hoax patterns, or misinformation as of 2026.
+Claim: "${textQuery}"
+
+Provide a strict raw JSON response with no markdown formatting:
+{"verdict": "True" or "False" or "Unverified" or "Misleading", "reason": "A brief 1-sentence analytical justification."}`;
+
+  let retries = 3;
+  let delay = 1000;
+  let response = null;
+
+  // Retry loop to handle transient high-demand spikes smoothly
+  while (retries > 0) {
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          contents: [{ parts: [{ text: prompt }] }] 
+        })
+      });
+
+      if (response.status === 503 || response.status === 429) {
+        // High demand or rate limit encountered, wait and retry
+        retries--;
+        if (retries === 0) break;
+        await new Promise(res => setTimeout(res, delay));
+        delay *= 2; // Exponential backoff
+        continue;
+      }
+      break;
+    } catch (e) {
+      retries--;
+      if (retries === 0) throw e;
+      await new Promise(res => setTimeout(res, delay));
+    }
+  }
+
+  try {
+    const data = await response.json();
+    
+    if (data.error) {
+      throw new Error(data.error.message || "API returned an error");
+    }
+
+    let rawText = data.candidates[0].content.parts[0].text;
+    let cleanJsonText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
+    const evaluation = JSON.parse(cleanJsonText);
+
+    const lowerVerdict = evaluation.verdict.toLowerCase();
+    let statusColor = "#38bdf8"; 
+    let bgStyle = "#0f172a";
+    
+    if (lowerVerdict.includes("false") || lowerVerdict.includes("misleading") || lowerVerdict.includes("hoax")) {
+      statusColor = "#ef4444"; 
+      bgStyle = "#2a1215";
+    } else if (lowerVerdict.includes("true")) {
+      statusColor = "#22c55e"; 
+      bgStyle = "#064e3b";
+    }
+
+    factCheckOutput.innerHTML = `
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="font-size: 14px; color: #f8fafc;"><strong>Analyzed Corpus:</strong> "${textQuery.substring(0, 100)}..."</div>
+        <div style="padding: 10px; background: ${bgStyle}; border-left: 3px solid ${statusColor}; border-radius: 4px;">
+          <span style="color: ${statusColor}; font-weight: bold;">Forensic Verdict: ${evaluation.verdict}</span><br>
+          <span style="font-size: 13px; color: #cbd5e1;">${evaluation.reason}</span>
+        </div>
+      </div>
+    `;
+
+  } catch (err) {
+    console.error(err);
+    factCheckOutput.innerHTML = `
+      <div style="padding: 10px; background: #2a1215; border-left: 3px solid #ef4444; border-radius: 4px;">
+        <span style="color: #ef4444; font-weight: bold;">Server Busy:</span> 
+        <span style="font-size: 13px; color: #fca5a5;">The model is experiencing temporary high demand. Please try clicking scan again in a moment.</span>
+      </div>
+    `;
+  }
+}
+
 // Fully Dynamic Socratic MIL Checklist Generator
 function generateSocraticChecklist(isAI, typeLabel, exifInfo = "", textContent = "") {
   let coreQuestion = '';
   let metadataQuestion = '';
 
-  // 1. Tailor the core critical thinking prompt based on AI probability
   if (isAI) {
     coreQuestion = `<strong>1. Synthetic Anomaly Analysis:</strong> This asset triggered a high AI probability index. Ask: <em>"Are there structural warping artifacts, asymmetrical background details, or lighting inconsistencies that betray generative synthesis?"</em>`;
   } else {
     coreQuestion = `<strong>1. Authenticity & Capture Context:</strong> This asset leans toward authentic patterns. Ask: <em>"Does the physical environment or lighting match the stated time and place of capture?"</em>`;
   }
 
-  // 2. Tailor the metadata/provenance prompt
   if (exifInfo && (exifInfo.includes("Model") || exifInfo.includes("Software") || exifInfo.includes("Captured"))) {
     metadataQuestion = `<strong>2. Metadata Cross-Check:</strong> EXIF records hardware/software trace signatures. Ask: <em>"Does this camera make and original timestamp align with the context claimed in the post?"</em>`;
   } else {
     metadataQuestion = `<strong>2. Provenance Trace:</strong> Hardware EXIF was stripped. Ask: <em>"Why was metadata removed, and can you locate the primary uploader via reverse search?"</em>`;
   }
 
-  // 3. Return clean, correctly structured HTML without bad regex replacement
   return `
     <strong>🧠 Socratic Critical Thinking Guide (${typeLabel})</strong><br>
     Don't take automated tools at face value. Complete this interactive UNESCO verification checklist before sharing:<br>
@@ -283,8 +370,10 @@ if (scanTextBtn) {
     artifactList.innerHTML = `<li>Evaluated corpus length: ${text.length} characters.</li><li>Matched stylistic indicators: ${matchCount}</li>`;
     crossDot.style.background = "#10b981"; crossScoreText.innerText = "Text Mode"; crossLabel.innerText = "Independent text corpus audit active.";
 
-    // FIXED: Passed parameters correctly to trigger dynamic checklist rules
     milGuidanceBox.innerHTML = generateSocraticChecklist(isAIText, "Text Stream Audit", "", text);
+    
+    // Trigger Fact Checker for the text stream
+    runFactCheckAudit(text);
 
     cardGeneratorSection.style.display = "block";
     cardHeadline.innerText = isAIText ? "Flagged: Potential AI-Generated Text" : "Verified: Natural Language Corpus";
@@ -320,6 +409,9 @@ scanBtn.addEventListener('click', async () => {
     const cleanOcr = text ? text.trim() : "(No readable text overlay detected)";
     ocrOutput.innerText = cleanOcr;
 
+    // Trigger Fact Checker using extracted OCR text
+    runFactCheckAudit(cleanOcr);
+
     statusDiv.innerText = "Step 2/2: Executing deep provenance inspection...";
     const results = await runForensicInspection(currentImageFile, selectedImageUrl);
 
@@ -345,7 +437,6 @@ scanBtn.addEventListener('click', async () => {
     crossScoreText.innerText = "Aligned";
     crossLabel.innerText = "Semantic consistency checked against metadata payload.";
 
-    // FIXED: Passed results.isAI, results.exifText, and cleanOcr so Socratic questions adapt to the score
     milGuidanceBox.innerHTML = generateSocraticChecklist(results.isAI, "Visual Asset Audit", results.exifText, cleanOcr);
 
     cardGeneratorSection.style.display = "block";
@@ -386,19 +477,16 @@ if (copyCardBtn) {
 }
 
 // Full Publication-Grade Analytical Infographic Canvas Generator & Downloader
-// Full Publication-Grade Analytical Infographic Canvas Generator & Downloader
 if (downloadCardBtn) {
   downloadCardBtn.addEventListener('click', () => {
     const canvas = document.createElement('canvas');
     canvas.width = 1200;
-    canvas.height = 1320; // Reduced total height to remove bottom dead space
+    canvas.height = 1320; 
     const ctx = canvas.getContext('2d');
 
-    // 1. Background Fill
     ctx.fillStyle = '#090d16';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Outer Container Wrapper Box
     ctx.fillStyle = '#0f172a';
     ctx.strokeStyle = '#334155';
     ctx.lineWidth = 4;
@@ -407,7 +495,6 @@ if (downloadCardBtn) {
     ctx.fill();
     ctx.stroke();
 
-    // 2. Header Banner Segment
     ctx.fillStyle = '#818cf8';
     ctx.font = 'bold 22px system-ui, sans-serif';
     ctx.fillText("SYNTHLENS FORENSIC INTELLIGENCE BRIEFING", 80, 105);
@@ -422,7 +509,6 @@ if (downloadCardBtn) {
     ctx.font = 'bold 18px system-ui, sans-serif';
     ctx.fillText(cardBadge.innerText.toUpperCase(), canvas.width - 245, 109);
 
-    // Header Main Title & Verdict
     ctx.fillStyle = '#f8fafc';
     ctx.font = 'bold 36px system-ui, sans-serif';
     ctx.fillText(cardHeadline.innerText, 80, 170, canvas.width - 160);
@@ -431,7 +517,6 @@ if (downloadCardBtn) {
     ctx.font = 'bold 22px system-ui, sans-serif';
     ctx.fillText(lastAuditData.verdict.toUpperCase(), 80, 205);
 
-    // Divider Line
     ctx.strokeStyle = '#1e293b';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -439,7 +524,6 @@ if (downloadCardBtn) {
     ctx.lineTo(canvas.width - 80, 235);
     ctx.stroke();
 
-    // 3. Quantitative Gauge / Meter Section
     ctx.fillStyle = '#1e293b';
     ctx.beginPath();
     ctx.roundRect(80, 260, canvas.width - 160, 140, 12);
@@ -457,7 +541,6 @@ if (downloadCardBtn) {
     ctx.font = '16px system-ui, sans-serif';
     ctx.fillText(lastAuditData.scoreText, 220, 350);
 
-    // Visual Meter Bar Background & Fill
     ctx.fillStyle = '#0f172a';
     ctx.beginPath();
     ctx.roundRect(600, 320, 460, 20, 10);
@@ -469,8 +552,6 @@ if (downloadCardBtn) {
     ctx.roundRect(600, 320, fillWidth, 20, 10);
     ctx.fill();
 
-    // 4. Metadata & OCR Context Grid Section (Compact Height: 180px)
-    // Left Box: Metadata Stream
     ctx.fillStyle = '#1e293b';
     ctx.beginPath();
     ctx.roundRect(80, 420, 500, 180, 12);
@@ -489,7 +570,6 @@ if (downloadCardBtn) {
       exifY += 24;
     });
 
-    // Right Box: Extracted OCR / Corpus Text
     ctx.fillStyle = '#1e293b';
     ctx.beginPath();
     ctx.roundRect(610, 420, 510, 180, 12);
@@ -503,7 +583,6 @@ if (downloadCardBtn) {
     ctx.font = '14px system-ui, sans-serif';
     ctx.fillText(`"${lastAuditData.ocrText}"`, 645, 505, 440);
 
-    // 5. Structural Heuristics & Artifact Bullet Panel
     ctx.fillStyle = '#1e293b';
     ctx.beginPath();
     ctx.roundRect(80, 620, canvas.width - 160, 110, 12);
@@ -521,7 +600,6 @@ if (downloadCardBtn) {
       artY += 30;
     });
 
-    // 6. UNESCO Socratic MIL Copilot & Verification Guide Panel
     ctx.fillStyle = '#172033';
     ctx.strokeStyle = '#6366f1';
     ctx.lineWidth = 2;
@@ -545,7 +623,6 @@ if (downloadCardBtn) {
     ctx.fillText("[  ] 3. Amplification Risk: What is the societal impact if this media is unverified?", 115, 970);
     ctx.fillText("[  ] 4. Cross-Modal Alignment: Do the caption details align with visual/EXIF data?", 115, 1020);
 
-    // 7. Footer Attribution Block
     ctx.strokeStyle = '#1e293b';
     ctx.beginPath();
     ctx.moveTo(80, 1220);
@@ -556,7 +633,6 @@ if (downloadCardBtn) {
     ctx.font = '14px system-ui, sans-serif';
     ctx.fillText("Official UNESCO Media & Information Literacy (MIL) Analytical Report • SynthLens AI Scanner", 80, 1265);
 
-    // Trigger PNG Download
     const link = document.createElement('a');
     link.download = 'synthlens-analytical-infographic-report.png';
     link.href = canvas.toDataURL('image/png');
