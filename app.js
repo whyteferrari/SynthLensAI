@@ -35,7 +35,7 @@ const cardBadge = document.getElementById('cardBadge');
 const copyCardBtn = document.getElementById('copyCardBtn');
 const downloadCardBtn = document.getElementById('downloadCardBtn');
 
-// Store active forensic metrics globally for canvas rendering
+// Store active forensic metrics globally for canvas rendering (including Fact-Check data)
 let lastAuditData = {
   verdict: "Awaiting Analysis",
   scoreText: "0%",
@@ -43,6 +43,8 @@ let lastAuditData = {
   isAI: false,
   exifText: "No metadata loaded",
   ocrText: "No text extracted",
+  factCheckVerdict: "Pending",
+  factCheckReason: "Awaiting text stream or OCR text to cross-reference claims...",
   artifacts: []
 };
 
@@ -128,7 +130,7 @@ function preprocessImage(img) {
   for (let i = 0; i < 224 * 224; i++) {
     let r = data[i * 4] / 255.0, g = data[i * 4 + 1] / 255.0, b = data[i * 4 + 2] / 255.0;
     float32Data[i] = (r - mean[0]) / std[0];                            
-    float32Data[224 * 224 + i] = (g - mean[1]) / std[1];                
+    float32Data[224 * 224 + i] = (g - mean[1]) / std[1];               
     float32Data[2 * 224 * 224 + i] = (b - mean[2]) / std[2];            
   }
   return new ort.Tensor('float32', float32Data, [1, 3, 224, 224]);
@@ -227,13 +229,14 @@ async function runFactCheckAudit(textQuery) {
   
   if (!textQuery || textQuery.includes("(No readable text") || textQuery.trim() === "") {
     factCheckOutput.innerHTML = "No textual claims detected for fact-checking.";
+    lastAuditData.factCheckVerdict = "N/A";
+    lastAuditData.factCheckReason = "No textual claims available.";
     return;
   }
 
   factCheckOutput.innerHTML = "Consulting forensic AI model for claim verification...";
 
-  const GEMINI_API_KEY = "AQ.A=b8R=N6LW9-VsZ=Q-8MS9f=t81p=s56s=sWsGZAG=BdRYYin=0CA=4Yj=8A";
-  // Updated to the latest stable production model endpoint
+  const GEMINI_API_KEY = "AQ.A=b8RN6K=SoOf6Leg64=m4XGaQ=9Bn1ugva=OOjLd0Q=7FB=Zf=cwZjepA";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${GEMINI_API_KEY}`;
 
   const prompt = `You are a forensic fact-checking assistant. Analyze the following claim or text corpus for authenticity, viral hoax patterns, or misinformation as of 2026.
@@ -246,7 +249,6 @@ Provide a strict raw JSON response with no markdown formatting:
   let delay = 1000;
   let response = null;
 
-  // Retry loop to handle transient high-demand spikes smoothly
   while (retries > 0) {
     try {
       response = await fetch(url, {
@@ -258,11 +260,10 @@ Provide a strict raw JSON response with no markdown formatting:
       });
 
       if (response.status === 503 || response.status === 429) {
-        // High demand or rate limit encountered, wait and retry
         retries--;
         if (retries === 0) break;
         await new Promise(res => setTimeout(res, delay));
-        delay *= 2; // Exponential backoff
+        delay *= 2; 
         continue;
       }
       break;
@@ -283,6 +284,10 @@ Provide a strict raw JSON response with no markdown formatting:
     let rawText = data.candidates[0].content.parts[0].text;
     let cleanJsonText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
     const evaluation = JSON.parse(cleanJsonText);
+
+    // Save to global audit state for canvas rendering
+    lastAuditData.factCheckVerdict = evaluation.verdict;
+    lastAuditData.factCheckReason = evaluation.reason;
 
     const lowerVerdict = evaluation.verdict.toLowerCase();
     let statusColor = "#38bdf8"; 
@@ -308,6 +313,8 @@ Provide a strict raw JSON response with no markdown formatting:
 
   } catch (err) {
     console.error(err);
+    lastAuditData.factCheckVerdict = "Error";
+    lastAuditData.factCheckReason = "Temporary server high demand during check.";
     factCheckOutput.innerHTML = `
       <div style="padding: 10px; background: #2a1215; border-left: 3px solid #ef4444; border-radius: 4px;">
         <span style="color: #ef4444; font-weight: bold;">Server Busy:</span> 
@@ -347,7 +354,7 @@ function generateSocraticChecklist(isAI, typeLabel, exifInfo = "", textContent =
 
 // Text Stream Audit Handler
 if (scanTextBtn) {
-  scanTextBtn.addEventListener('click', () => {
+  scanTextBtn.addEventListener('click', async () => {
     const text = textInput.value.trim();
     if (!text) { statusDiv.innerText = "Please provide a valid text stream."; return; }
 
@@ -371,16 +378,8 @@ if (scanTextBtn) {
     crossDot.style.background = "#10b981"; crossScoreText.innerText = "Text Mode"; crossLabel.innerText = "Independent text corpus audit active.";
 
     milGuidanceBox.innerHTML = generateSocraticChecklist(isAIText, "Text Stream Audit", "", text);
-    
-    // Trigger Fact Checker for the text stream
-    runFactCheckAudit(text);
 
-    cardGeneratorSection.style.display = "block";
-    cardHeadline.innerText = isAIText ? "Flagged: Potential AI-Generated Text" : "Verified: Natural Language Corpus";
-    cardSummary.innerText = `SynthLens Audit: Evaluated text corpus with ${matchCount} marker triggers. Human critical verification recommended.`;
-    cardBadge.innerText = badgeStr;
-    cardBadge.style.background = isAIText ? "#7f1d1d" : "#065f46";
-
+    // Save basic audit data before async Fact Check call updates it
     lastAuditData = {
       verdict: verdictStr,
       scoreText: isAIText ? "High AI Probability (Text)" : "Human Syntax Pattern",
@@ -388,8 +387,19 @@ if (scanTextBtn) {
       isAI: isAIText,
       exifText: "Text Stream Audit (No EXIF profile)",
       ocrText: text.length > 180 ? text.substring(0, 180) + "..." : text,
+      factCheckVerdict: "Pending",
+      factCheckReason: "Checking external claim...",
       artifacts: [`Evaluated corpus length: ${text.length} characters.`, `Matched stylistic indicators: ${matchCount}`]
     };
+    
+    // Trigger Fact Checker for the text stream
+    await runFactCheckAudit(text);
+
+    cardGeneratorSection.style.display = "block";
+    cardHeadline.innerText = isAIText ? "Flagged: Potential AI-Generated Text" : "Verified: Natural Language Corpus";
+    cardSummary.innerText = `SynthLens Audit: Evaluated text corpus with ${matchCount} marker triggers. Human critical verification recommended.`;
+    cardBadge.innerText = badgeStr;
+    cardBadge.style.background = isAIText ? "#7f1d1d" : "#065f46";
 
     statusDiv.innerText = "Text Forensic Audit Complete.";
   });
@@ -408,9 +418,6 @@ scanBtn.addEventListener('click', async () => {
     await worker.terminate();
     const cleanOcr = text ? text.trim() : "(No readable text overlay detected)";
     ocrOutput.innerText = cleanOcr;
-
-    // Trigger Fact Checker using extracted OCR text
-    runFactCheckAudit(cleanOcr);
 
     statusDiv.innerText = "Step 2/2: Executing deep provenance inspection...";
     const results = await runForensicInspection(currentImageFile, selectedImageUrl);
@@ -439,12 +446,7 @@ scanBtn.addEventListener('click', async () => {
 
     milGuidanceBox.innerHTML = generateSocraticChecklist(results.isAI, "Visual Asset Audit", results.exifText, cleanOcr);
 
-    cardGeneratorSection.style.display = "block";
-    cardHeadline.innerText = results.isAI ? "Flagged: Potential AI-Generated Visual" : "Verified: Authentic Image Profile";
-    cardSummary.innerText = `SynthLens Audit: Evaluated multimodal asset. AI confidence rating: ${results.aiProbability}%. Use critical MIL filters before sharing.`;
-    cardBadge.innerText = badgeStr;
-    cardBadge.style.background = results.isAI ? "#7f1d1d" : "#065f46";
-
+    // Save initial audit data before fact check resolves
     lastAuditData = {
       verdict: verdictStr,
       scoreText: `AI Index Profile (${results.aiProbability}%)`,
@@ -452,8 +454,19 @@ scanBtn.addEventListener('click', async () => {
       isAI: results.isAI,
       exifText: results.exifText,
       ocrText: cleanOcr.length > 180 ? cleanOcr.substring(0, 180) + "..." : cleanOcr,
+      factCheckVerdict: "Pending",
+      factCheckReason: "Checking OCR text against external databases...",
       artifacts: results.artifacts
     };
+
+    // Trigger Fact Checker using extracted OCR text
+    await runFactCheckAudit(cleanOcr);
+
+    cardGeneratorSection.style.display = "block";
+    cardHeadline.innerText = results.isAI ? "Flagged: Potential AI-Generated Visual" : "Verified: Authentic Image Profile";
+    cardSummary.innerText = `SynthLens Audit: Evaluated multimodal asset. AI confidence rating: ${results.aiProbability}%. Use critical MIL filters before sharing.`;
+    cardBadge.innerText = badgeStr;
+    cardBadge.style.background = results.isAI ? "#7f1d1d" : "#065f46";
 
     statusDiv.innerText = "Forensic Audit & Socratic Copilot Initialized.";
     scanBtn.classList.add('hidden');
@@ -476,12 +489,12 @@ if (copyCardBtn) {
   });
 }
 
-// Full Publication-Grade Analytical Infographic Canvas Generator & Downloader
+// Full Publication-Grade Analytical Infographic Canvas Generator & Downloader (Including Fact-Check Section)
 if (downloadCardBtn) {
   downloadCardBtn.addEventListener('click', () => {
     const canvas = document.createElement('canvas');
     canvas.width = 1200;
-    canvas.height = 1320; 
+    canvas.height = 1580; // Extended height to seamlessly fit Fact-Check box
     const ctx = canvas.getContext('2d');
 
     ctx.fillStyle = '#090d16';
@@ -524,6 +537,7 @@ if (downloadCardBtn) {
     ctx.lineTo(canvas.width - 80, 235);
     ctx.stroke();
 
+    // Neural Index Box
     ctx.fillStyle = '#1e293b';
     ctx.beginPath();
     ctx.roundRect(80, 260, canvas.width - 160, 140, 12);
@@ -552,86 +566,108 @@ if (downloadCardBtn) {
     ctx.roundRect(600, 320, fillWidth, 20, 10);
     ctx.fill();
 
+    // --- EXTERNAL CLAIM & FACT CHECK SECTION ---
     ctx.fillStyle = '#1e293b';
     ctx.beginPath();
-    ctx.roundRect(80, 420, 500, 180, 12);
+    ctx.roundRect(80, 420, canvas.width - 160, 130, 12);
+    ctx.fill();
+
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = 'bold 17px system-ui, sans-serif';
+    ctx.fillText("External Claim & Fact Check Verification", 115, 455);
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = 'bold 15px system-ui, sans-serif';
+    ctx.fillText(`Claim Status Verdict: ${lastAuditData.factCheckVerdict}`, 115, 490);
+
+    ctx.fillStyle = '#cbd5e1';
+    ctx.font = '14px system-ui, sans-serif';
+    ctx.fillText(`Reasoning: ${lastAuditData.factCheckReason}`, 115, 525, canvas.width - 190);
+
+    // EXIF & Metadata Provenance Box
+    ctx.fillStyle = '#1e293b';
+    ctx.beginPath();
+    ctx.roundRect(80, 570, 500, 180, 12);
     ctx.fill();
 
     ctx.fillStyle = '#818cf8';
     ctx.font = 'bold 17px system-ui, sans-serif';
-    ctx.fillText("EXIF & Metadata Provenance", 115, 460);
+    ctx.fillText("EXIF & Metadata Provenance", 115, 610);
 
     ctx.fillStyle = '#cbd5e1';
     ctx.font = '14px monospace';
     let exifLines = lastAuditData.exifText.split("<br>");
-    let exifY = 495;
+    let exifY = 645;
     exifLines.forEach(line => {
       ctx.fillText(`• ${line.replace(/<[^>]*>?/gm, '')}`, 115, exifY, 430);
       exifY += 24;
     });
 
+    // Extracted Text Box
     ctx.fillStyle = '#1e293b';
     ctx.beginPath();
-    ctx.roundRect(610, 420, 510, 180, 12);
+    ctx.roundRect(610, 570, 510, 180, 12);
     ctx.fill();
 
     ctx.fillStyle = '#818cf8';
     ctx.font = 'bold 17px system-ui, sans-serif';
-    ctx.fillText("Extracted Text & Context Preview", 645, 460);
+    ctx.fillText("Extracted Text & Context Preview", 645, 610);
 
     ctx.fillStyle = '#cbd5e1';
     ctx.font = '14px system-ui, sans-serif';
-    ctx.fillText(`"${lastAuditData.ocrText}"`, 645, 505, 440);
+    ctx.fillText(`"${lastAuditData.ocrText}"`, 645, 655, 440);
 
+    // Structural Heuristics Box
     ctx.fillStyle = '#1e293b';
     ctx.beginPath();
-    ctx.roundRect(80, 620, canvas.width - 160, 110, 12);
+    ctx.roundRect(80, 770, canvas.width - 160, 110, 12);
     ctx.fill();
 
     ctx.fillStyle = '#34d399';
     ctx.font = 'bold 17px system-ui, sans-serif';
-    ctx.fillText("Structural Heuristics & Neural Signals", 115, 655);
+    ctx.fillText("Structural Heuristics & Neural Signals", 115, 805);
 
     ctx.fillStyle = '#94a3b8';
     ctx.font = '15px system-ui, sans-serif';
-    let artY = 685;
+    let artY = 835;
     lastAuditData.artifacts.forEach(item => {
       ctx.fillText(`[✓] ${item}`, 115, artY, canvas.width - 230);
       artY += 30;
     });
 
+    // Socratic Copilot Checklist Box
     ctx.fillStyle = '#172033';
     ctx.strokeStyle = '#6366f1';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.roundRect(80, 750, canvas.width - 160, 310, 12);
+    ctx.roundRect(80, 900, canvas.width - 160, 310, 12);
     ctx.fill();
     ctx.stroke();
 
     ctx.fillStyle = '#818cf8';
     ctx.font = 'bold 18px system-ui, sans-serif';
-    ctx.fillText("UNESCO Socratic MIL Copilot & Verification Guide", 115, 795);
+    ctx.fillText("UNESCO Socratic MIL Copilot & Verification Guide", 115, 945);
 
     ctx.fillStyle = '#cbd5e1';
     ctx.font = '15px system-ui, sans-serif';
-    ctx.fillText("Complete this interactive verification checklist before sharing unverified content:", 115, 825);
+    ctx.fillText("Complete this interactive verification checklist before sharing unverified content:", 115, 975);
 
     ctx.font = 'bold 15px system-ui, sans-serif';
     ctx.fillStyle = '#f8fafc';
-    ctx.fillText("[  ] 1. Source Provenance: Have you checked the original context/author?", 115, 870);
-    ctx.fillText("[  ] 2. Plausibility Check: Does the claim trigger emotional outrage or match known news?", 115, 920);
-    ctx.fillText("[  ] 3. Amplification Risk: What is the societal impact if this media is unverified?", 115, 970);
-    ctx.fillText("[  ] 4. Cross-Modal Alignment: Do the caption details align with visual/EXIF data?", 115, 1020);
+    ctx.fillText("[   ] 1. Source Provenance: Have you checked the original context/author?", 115, 1020);
+    ctx.fillText("[   ] 2. Plausibility Check: Does the claim trigger emotional outrage or match known news?", 115, 1070);
+    ctx.fillText("[   ] 3. Amplification Risk: What is the societal impact if this media is unverified?", 115, 1120);
+    ctx.fillText("[   ] 4. Cross-Modal Alignment: Do the caption details align with visual/EXIF data?", 115, 1170);
 
     ctx.strokeStyle = '#1e293b';
     ctx.beginPath();
-    ctx.moveTo(80, 1220);
-    ctx.lineTo(canvas.width - 80, 1220);
+    ctx.moveTo(80, 1480);
+    ctx.lineTo(canvas.width - 80, 1480);
     ctx.stroke();
 
     ctx.fillStyle = '#64748b';
     ctx.font = '14px system-ui, sans-serif';
-    ctx.fillText("Official UNESCO Media & Information Literacy (MIL) Analytical Report • SynthLens AI Scanner", 80, 1265);
+    ctx.fillText("Official UNESCO Media & Information Literacy (MIL) Analytical Report • SynthLens AI Scanner", 80, 1525);
 
     const link = document.createElement('a');
     link.download = 'synthlens-analytical-infographic-report.png';

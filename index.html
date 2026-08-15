@@ -8,7 +8,7 @@
   <!-- Include ExifReader for deep metadata checks -->
   <script src="https://cdn.jsdelivr.net/npm/exifreader@4.23.0/dist/exif-reader.js"></script>
 </head>
-<body style="margin: 0; padding-top: 40px; background: #090d16; font-family: system-ui, -apple-system, sans-serif;">
+<body style="margin: 0; padding-top: 40px; background: var(--bg-main, #090d16); color: var(--text-main, #f8fafc); font-family: system-ui, -apple-system, sans-serif;">
 
   <!-- Top Persistent Warning Banner -->
   <div style="position: fixed; top: 0; left: 0; width: 100%; background: #1e1b4b; color: #c7d2fe; text-align: center; padding: 10px 15px; font-size: 12px; font-weight: 500; border-bottom: 1px solid #312e81; z-index: 1000; box-sizing: border-box; display: flex; justify-content: center; align-items: center; gap: 8px;">
@@ -63,7 +63,7 @@
       <section class="scan-card">
         <h2>2. Text / Caption Input</h2>
         <p style="font-size: 0.9rem; color: #94a3b8; margin-bottom: 10px;">Paste captions or textual bodies to audit against automated generation markers.</p>
-        <textarea id="textInput" placeholder="Paste text or metadata captions here..." style="width: 100%; height: 145px; background: #0f172a; color: #f8fafc; border: 1px solid #334155; border-radius: 8px; padding: 12px; font-family: inherit; resize: vertical;"></textarea>
+        <textarea id="textInput" placeholder="Paste text or metadata captions here..." style="width: 100%; height: 145px; background: var(--bg-darker, #0f172a); color: var(--text-main, #f8fafc); border: 1px solid var(--border, #334155); border-radius: 8px; padding: 12px; font-family: inherit; resize: vertical;"></textarea>
         <button id="scanTextBtn" style="margin-top: 10px; background: #6366f1; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%;">Audit Text Stream</button>
       </section>
     </div>
@@ -157,14 +157,14 @@
         <p style="font-size: 12px; color: #94a3b8; margin-bottom: 10px;">Turn your deep audit into an institutional data-journalism report card to debunk misinformation.</p>
         
         <!-- Preview Canvas / Render Box -->
-        <div id="shareCardPreview" style="background: #090d16; border: 1px solid #334155; border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1e293b; padding-bottom: 8px;">
+        <div id="shareCardPreview" style="background: var(--bg-darker, #090d16); border: 1px solid var(--border, #334155); border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border, #1e293b); padding-bottom: 8px;">
             <span style="font-size: 11px; font-weight: bold; color: #818cf8; text-transform: uppercase;">SynthLens Fact-Check Infographic Briefing</span>
             <span id="cardBadge" style="font-size: 10px; padding: 2px 6px; border-radius: 4px; background: #065f46; color: #34d399;">Verified</span>
           </div>
-          <p id="cardHeadline" style="font-size: 14px; font-weight: bold; color: #f8fafc;">Awaiting audit results...</p>
-          <p id="cardSummary" style="font-size: 12px; color: #94a3b8;">Run a forensic check to populate educational findings.</p>
-          <div style="font-size: 10px; color: #64748b; margin-top: 4px; border-top: 1px dashed #1e293b; padding-top: 6px;">Powered by UNESCO Media & Information Literacy (MIL) Framework</div>
+          <p id="cardHeadline" style="font-size: 14px; font-weight: bold; color: var(--text-main, #f8fafc);">Awaiting audit results...</p>
+          <p id="cardSummary" style="font-size: 12px; color: var(--text-muted, #94a3b8);">Run a forensic check to populate educational findings.</p>
+          <div style="font-size: 10px; color: #64748b; margin-top: 4px; border-top: 1px dashed var(--border, #1e293b); padding-top: 6px;">Powered by UNESCO Media & Information Literacy (MIL) Framework</div>
         </div>
 
         <div style="display: flex; gap: 10px;">
