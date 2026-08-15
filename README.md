@@ -169,6 +169,27 @@ async function runOnnxModel(inputFloat32Array, inputShape = [1, 3, 224, 224]) {
 }
 
 ```
+### 4. Fact Checking Engine
+
+Verify extracted OCR text against reference database datasets or claim endpoints:
+
+```javascript
+async function verifyClaim(extractedText) {
+  // Pass extracted OCR text to the verification pipeline
+  const response = await fetch('/api/fact-check', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: extractedText }),
+  });
+
+  const factCheckResults = await response.json();
+  console.log('Fact Check Verdict:', factCheckResults);
+  
+  return factCheckResults;
+}
+
+
+```
 ---
 ## 📂 Project Directory Structure
 
